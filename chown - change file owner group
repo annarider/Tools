@@ -1,0 +1,9 @@
+chown root /u
+Change the owner of /u to "root".
+chown root:staff /u
+Likewise, but also change its group to "staff".
+chown -hR root /u
+Change the owner of /u and subfiles to "root".
+
+E.g. when used in Oracle Linux: 
+chown oracle:oracle semarchy.war 
