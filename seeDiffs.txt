@@ -1,0 +1,6 @@
+See the diffs between two different files
+diff <name of file1> <name of file 2>
+
+See the diffs between two different folders
+diff -rq <name of folder1> <name of folder2>
+
