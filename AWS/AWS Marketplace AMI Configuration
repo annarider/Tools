@@ -1,0 +1,146 @@
+AWS Marketplace AMI Configuration
+Specifications
+abc
+Stuff to put on AMI (in /home/ec2-user)
+semarchy-mdm-platform-war-2.2.4.GA20140519-1357.zip
+semarchy-pulse-2.2.0.GA20131015-1457.zip
+
+# syntax from Matt's machine:
+scp-east /Users/mdahlman/Installs/Semarchy/MDM/2.2/semarchy-mdm-platform-war-2.2.4.GA20140519-1357.zip ec2-user@54.208.109.153:/tmp
+scp-east /Users/mdahlman/Installs/Semarchy/Pulse/2.2/semarchy-pulse-2.2.0.GA20131015-1457.zip ec2-user@54.208.109.153:/tmp
+
+# Then from on the machine move these items to the home folder:
+mv /tmp/semarchy-mdm-platform-war-2.2.4.GA20140519-1357.zip ~
+mv /tmp/semarchy-pulse-2.2.0.GA20131015-1457.zip ~
+
+Using paths on Matt's machine. These need to be stored somewhere else eventually.
+/Users/mdahlman/Documents/workspace/Marketplace_v1 (includes current docs)
+/Users/mdahlman/Documents/workspace/semarchy-quick-config
+scp-east -r /Users/mdahlman/Documents/workspace/Marketplace_v1 ec2-user@54.208.109.153:/tmp
+scp-east -r /Users/mdahlman/Documents/workspace/semarchy-quick-config ec2-user@54.208.109.153:/tmp
+Manual setup
+sudo yum -y update
+
+# Swap file
+sudo dd if=/dev/zero of=/swapfile1 bs=1024 count=1048576
+sudo mkswap /swapfile1
+sudo chown root:root /swapfile1
+sudo chmod 0600 /swapfile1
+sudo swapon /swapfile1
+echo "/swapfile1 swap swap defaults 0 0" | sudo tee -a /etc/fstab
+
+# Tomcat
+sudo yum -y install tomcat7 tomcat7-admin-webapps
+sudo chkconfig --level 345 tomcat7 on
+sudo iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 8080
+sudo service iptables save
+# serve UTF-8 by default server.xml
+# Update manager application to allow larger file uploads
+
+# UNTESTED code (probably needs sudo or other tweak)
+# Increase upload max from 50MB to 500MB
+sed -i "s/52428800
+/524288000
+/" /usr/share/tomcat7/webapps/manager/WEB-INF/web.xml
+
+
+
+
+# Move helper apps into place
+sudo mkdir /usr/share/tomcat7/webapps/ROOT
+sudo mv /tmp/Marketplace_v1/* /usr/share/tomcat7/webapps/ROOT/
+sudo rm -r /tmp/Marketplace_v1
+sudo chown -R tomcat:tomcat /usr/share/tomcat7/webapps/towe
+
+# Friendly quick-config
+sudo mkdir /usr/share/tomcat7/webapps/semarchy-quick-config
+sudo mv /tmp/semarchy-quick-config/* /usr/share/tomcat7/webapps/semarchy-quick-config
+sudo rm -r /tmp/semarchy-quick-config
+
+# Eventually I need to store these files with correct permissions.
+# For now I can manually fix the permissions.
+sudo chown -R tomcat:tomcat /usr/share/tomcat7/webapps/semarchy-quick-config
+sudo chmod 755 /usr/share/tomcat7/webapps/semarchy-quick-config/*.sh
+
+# Deploy Semarchy
+# Semarchy web application
+cd /home/ec2-user
+unzip semarchy-mdm-platform-war-3.0.1.A20140715-1830.zip
+sudo cp geronimo-javamail_1.4_mail-1.8.3.jar /usr/share/tomcat7/lib/
+sudo cp ojdbc6.jar /usr/share/tomcat7/lib/
+sudo chown tomcat:tomcat /home/ec2-user/semarchy.war
+sudo mv /home/ec2-user/semarchy.war /usr/share/tomcat7/webapps/
+
+# Need to restart tomcat for changes to take effect
+# Need to reboot machine for swap changes to take effect
+
+#
+# CLEANUP before creating AMI
+#
+
+# tomcat can edit but CANNOT create these files.
+# Therefore it's critical for these files
+# to exist before the quick config tool runs:
+sudo service tomcat7 stop
+sudo touch /etc/tomcat7/tomcat-users.xml
+sudo touch /etc/tomcat7/Catalina/localhost/semarchy.xml
+sudo chown tomcat:tomcat /etc/tomcat7/tomcat-users.xml
+sudo chown tomcat:tomcat /etc/tomcat7/Catalina/localhost/semarchy.xml
+# BUT... if they already exist, then truncate them before AMI time
+cat /dev/null | sudo tee /etc/tomcat7/tomcat-users.xml
+cat /dev/null | sudo tee /etc/tomcat7/Catalina/localhost/semarchy.xml
+
+# Find authorized_keys in these files:
+sudo find / -name authorized_keys
+/home/ec2-user/.ssh/authorized_keys
+/root/.ssh/authorized_keys
+
+sudo rm /home/ec2-user/.ssh/authorized_keys
+sudo rm /root/.ssh/authorized_keys
+
+# Remove logs and history:
+sudo su -
+rm -f /var/log/tomcat7/*
+history -c && history -w
+exit
+
+history -c && history -w
+
+
+
+
+Out of scope for v1 of AWS Marketplace launch:
+curl "http://semadmin:semadmin@localhost:8080/manager/text/deploy?path=/semarchy&war=file:/home/ec2-user/semarchy.war&config=file:/tmp/semarchy.xml"
+
+# Semarchy Pulse
+cp /tmp/pulse_configuration-DEMO1.xml /tmp/pulse_configuration.xml
+sed -i "s/DEMO1/JUNIPER/g" /tmp/pulse_configuration.xml
+sudo cp /tmp/pulse_configuration.xml /usr/share/tomcat7/webapps/pulse_admin/semarchy-pulse-2.2.0.GA20131015-1457/conf/pulse_configuration.xml
+sudo chown -R tomcat:tomcat /usr/share/tomcat7/webapps/pulse_admin
+
+
+Pulse Admin
+This part is still just initial development and testing. It's notes rather than documenting the final steps.
+cd /usr/share/tomcat7/webapps/
+sudo mkdir pulse_admin
+sudo chown tomcat:tomcat pulse_admin
+cd pulse_admin
+sudo unzip -d . /tmp/semarchy-pulse-2.2.0.GA20131015-1457.zip
+sudo cp ../ROOT/* ./
+sudo cp semarchy-pulse-2.2.0.GA20131015-1457/doc/styles/semarchy_logo.png ./pulse_logo.png
+
+
+
+Summary
+
+
+Possible licensing for future
+Hourly/Monthly with RDS size check
+The idea would be to release a few items like this:
+Semarchy MDM Micro
+Semarchy MDM Small
+Semarchy MDM Medium
+etc.  (I realize that FX will add the word "Convergence". Let's consider leaving it out.)
+The version of Semarchy pre-installed on the AMI would use AWS APIs to test the size of the RDS instance. It would only work when (RDS size <= allowed size) where the allowed RDS size is the term Micro, Small, Medium, etc. in the product name.
+
+
